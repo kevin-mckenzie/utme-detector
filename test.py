@@ -43,11 +43,11 @@ for i in range(100):
     time.sleep(2)
     GPIO.output(18,GPIO.HIGH)
     #GPIO.output(14,GPIO.HIGH)
-    titties = Image.open('white.jpg')
-    titties = titties.resize((240,320), Image.ANTIALIAS)
+    bg = Image.open('white.jpg')
+    bg = bg.resize((240,320), Image.ANTIALIAS)
     # Fill the screen red, green, blue, then black:
     # Clear the screen a random color
-    draw = ImageDraw.Draw(titties)
+    draw = ImageDraw.Draw(bg)
     # font = ImageFont.truetype(<font-file>, <font-size>)
     font = ImageFont.truetype("sans-serif.ttf", 12)
     sps.read_measured_values()
@@ -64,7 +64,7 @@ for i in range(100):
     sgp_read = "eCO2 = %d ppm \t TVOC = %d ppb" % (sgp.eCO2, sgp.TVOC)
     draw.text((0, 100),sgp_read, fill = (255,0,0,255), font=font)
     # draw.text((x, y),"Sample Text",(r,g,b))
-    display.image(titties)
+    display.image(bg)
     time.sleep(2)
     GPIO.output(18,GPIO.LOW)
     GPIO.output(14,GPIO.LOW)
