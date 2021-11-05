@@ -6,7 +6,7 @@ from scd30_i2c import SCD30
 from adafruit_rgb_display.rgb import color565
 from adafruit_rgb_display import ili9341
 import pandas as pd
- 
+
 #give sensors time to warm up to avoid errors
 time.sleep(1)
 
