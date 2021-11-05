@@ -1,4 +1,4 @@
-import time, busio, digitalio, board, subprocess, adafruit_sgp30
+import time, busio, digitalio, board, subprocess, adafruit_sgp30, os, csv
 from PIL import Image, ImageFont, ImageDraw, ImageOps
 import RPi.GPIO as GPIO
 from sps30 import SPS30
@@ -86,6 +86,9 @@ while True:
             recording = False
             filename = '/home/pi/Documents/utme-detector/data/' + date + '-' + df.iloc[0]['Timestamp']
             df.to_csv(path_or_buf = filename, index = False)
+            data = open('/home/pi/Documents/utme-detector/data/' + date + '-' + df.iloc[0]['Timestamp'])
+            os.fsync(data)
+            data.close()
             df = None
         time.sleep(2)
     
