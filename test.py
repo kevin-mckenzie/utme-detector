@@ -1,71 +1,186 @@
-import time
-import random
-import busio
-import digitalio
-import board
+import time, busio, digitalio, board, subprocess, adafruit_sgp30
+from PIL import Image, ImageFont, ImageDraw, ImageOps
 import RPi.GPIO as GPIO
 from sps30 import SPS30
 from scd30_i2c import SCD30
-from time import sleep
-from PIL import Image, ImageFont, ImageDraw
 from adafruit_rgb_display.rgb import color565
 from adafruit_rgb_display import ili9341
-import subprocess
-import adafruit_sgp30
+import pandas as pd
 
-sleep(1)
+#give sensors time to warm up to avoid errors
+time.sleep(1)
+
+#initialize sensor instances and i2c configuration
 i2c = busio.I2C(board.SCL, board.SDA, frequency=100000)
 sgp = adafruit_sgp30.Adafruit_SGP30(i2c)
 sps = SPS30(1)
 scd = SCD30()
 
+#set up pins for fans, button, and display LED
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(18,GPIO.OUT)
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(14,GPIO.OUT)
-# Configuratoin for CS and DC pins (these are FeatherWing defaults on M0/M4):
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(5, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.output(14,GPIO.HIGH)
+GPIO.output(18,GPIO.HIGH)
+
+# Set up display pins and instance
 cs_pin = digitalio.DigitalInOut(board.D8)
 dc_pin = digitalio.DigitalInOut(board.D25)
 reset_pin = digitalio.DigitalInOut(board.D24)
-# Config for display baudrate (default max is 24mhz):
 BAUDRATE = 24000000
-
-# Setup SPI bus using hardware SPI:
 spi = busio.SPI(clock=board.SCLK, MOSI=board.MOSI, MISO=board.MISO)
-
-# Create the ILI9341 display:
 display = ili9341.ILI9341(spi, cs=cs_pin, dc=dc_pin, rst = reset_pin, baudrate=BAUDRATE)
+font = ImageFont.truetype("/home/pi/Documents/utme-detector/sans-serif.ttf", 20)
+
+
+#start measurement for sensors that need initializiation before data can be requested from them
 sps.start_measurement()
 sgp.iaq_init()
-sleep(1)
+
+#delay one more second for screen to boot and data to be ready for retrieval
+time.sleep(1)
+
+
+recording = False
+df = None
 # Main loop:
-for i in range(100):
-    time.sleep(2)
-    GPIO.output(18,GPIO.HIGH)
-    #GPIO.output(14,GPIO.HIGH)
-    bg = Image.open('white.jpg')
-    bg = bg.resize((240,320), Image.ANTIALIAS)
-    # Fill the screen red, green, blue, then black:
-    # Clear the screen a random color
+while True:
+    #refresh background image each loop
+    bg= Image.open('/home/pi/Documents/utme-detector/bg.jpg')
+    bg= bg.resize((240,320), Image.ANTIALIAS)
     draw = ImageDraw.Draw(bg)
-    # font = ImageFont.truetype(<font-file>, <font-size>)
-    font = ImageFont.truetype("sans-serif.ttf", 12)
-    sps.read_measured_values()
-    m_time = str(subprocess.check_output(['sudo', 'hwclock', '-r']))
-    draw.text((0, 10),m_time, fill = (255,0,0,255), font=font, color = 'black')
+    
+    #make call to RTC each loop and save timestamp
+    rtc_time = str(subprocess.check_output(['sudo', 'hwclock', '-r']))
+    timestamp = rtc_time[13:24]
+    
+    #loop is on 2 second delay
+    time.sleep(2)
+    '''
+    This if block checks if the button is being pressed.
+    If it is, a new dataframe is created that will store data each loop.
+    If not, the block is skipped.
+    If the button has been pressed previously, the data is saved as a CSV and stored locally,
+    and then deletes the saved data from RAM.
+    '''
+    input_state = GPIO.input(5)
+    if input_state == False:
+        if recording == False:
+            recording = True
+            rtc_time = str(subprocess.check_output(['sudo', 'hwclock', '-r']))
+            date = rtc_time[2:12]
+            df = pd.DataFrame(columns = ['Timestamp',
+                                         'CO2',
+                                         'T',
+                                         'RH',
+                                         'TVOC',
+                                         'PM1.0',
+                                         'PM2.5',
+                                         'PM4.0',
+                                         'PM10.0',
+                                         'PMSize'])
+        elif recording == True:
+            recording = False
+            filename = '/home/pi/Documents/utme-detector/data/' + date + '-' + df.iloc[0]['Timestamp']
+            df.to_csv(path_or_buf = filename, index = False)
+            df = None
+        time.sleep(2)
+    
+    #check if new data is ready for scd30, and if it is, display it
     if scd.get_data_ready():
+        #read measurement if ready, otherwise skip to next sensor
         m = scd.read_measurement()
         if m is not None:
-            scd_read = f"CO2: {m[0]:.2f}ppm, temp: {m[1]:.2f}'C, rh: {m[2]:.2f}%"
-            draw.text((0, 50),scd_read, fill = (255,0,0,255), font=font)
-    if sps.dict_values['pm2p5'] is not None:
-        sps_read = "PM2.5 Value in µg/m3: " + str(sps.dict_values['pm2p5'])
-        draw.text((0, 75),sps_read, fill = (255,0,0,255), font=font)
-    sgp_read = "eCO2 = %d ppm \t TVOC = %d ppb" % (sgp.eCO2, sgp.TVOC)
-    draw.text((0, 100),sgp_read, fill = (255,0,0,255), font=font)
-    # draw.text((x, y),"Sample Text",(r,g,b))
+            #temperature and room humidity are combined as one text object
+            T_RH = str(m[1])[:4] + '       ' + str(m[2])[:5]
+            #paste T and RH to display
+            txt=Image.new('L', (300,30))
+            d = ImageDraw.Draw(txt)
+            d.text( (0, 0), T_RH,  font=font, fill=255)
+            w=txt.rotate(270,  expand=1)
+            bg.paste( ImageOps.colorize(w, (0,0,0), (255,255,255)), (44,138),  w)
+
+            #get CO2
+            CO2 = str(m[0])[:6]
+            #CO2 safety indicator
+            if float(CO2) > 5000:
+                color = (255,0,0)
+            elif float(CO2) < 3000:
+                color = (0,128,0)
+            else:
+                color = (255,255,0)
+            #paste CO2 reading to display
+            txt=Image.new('L', (300,30))
+            d = ImageDraw.Draw(txt)
+            d.text( (0, 0), CO2,  font=font, fill=255)
+            w=txt.rotate(270,  expand=1)
+            bg.paste( ImageOps.colorize(w, (0,0,0), color), (44,23),  w)
+
+    #check for available PM data then paste to screen if ready
+    sps.read_measured_values()
+    if sps.dict_values['pm2p5'] and sps.dict_values['typical']is not None:
+        pm25 = str(float(sps.dict_values['pm2p5']))[:5]
+        #safety indicator, numbers taken from google and converted from mg/m3 to ppb
+        if float(pm25) > 150.5:
+            color = (255,0,0)
+        elif float(pm25) < 55.4:
+            color = (0,128,0)
+        else:
+            color = (255,255,0)
+        pm_size = str(float(sps.dict_values['typical']))[:5]
+        
+        #paste PM data to display
+        txt=Image.new('L', (60,30))
+        d = ImageDraw.Draw(txt)
+        d.text( (0, 0), pm25,  font=font, fill=255)
+        w=txt.rotate(270,  expand=1)
+        bg.paste( ImageOps.colorize(w, (0,0,0), color), (148,230),  w)
+        
+        txt=Image.new('L', (160,30))
+        d = ImageDraw.Draw(txt)
+        d.text( (0, 0), pm_size,  font=font, fill=255)
+        w=txt.rotate(270,  expand=1)
+        bg.paste( ImageOps.colorize(w, (0,0,0), (0,128,0)), (148,133),  w) #colored green because it looks better
+
+    #retrieve TVOC sensor reading
+    TVOC = str(sgp.TVOC)
+    #safety indicator.  References: https://www.advsolned.com/how-tvoc-affects-indoor-air-quality-effects-on-wellbeing-and-health/ https://www.teesing.com/en/page/library/tools/ppm-mg3-converter#mg/m3%20to%20PPM%20converter
+    if float(TVOC) > 310:
+        color = (255,0,0)
+    elif float(TVOC) < 155:
+        color = (0,128,0)
+    else:
+        color = (255,255,0)
+    #past TVOC data to display image
+    txt=Image.new('L', (160,30))
+    d = ImageDraw.Draw(txt)
+    d.text( (0, 0), TVOC,  font=font, fill=255)
+    w=txt.rotate(270,  expand=1)
+    bg.paste( ImageOps.colorize(w, (0,0,0), color), (148,32),  w)
+    
+    if recording == True:
+        #if recording, add a row of data to the dataframe
+        data_series = pd.Series({'Timestamp': timestamp,
+                                 'CO2': CO2,
+                                 'T': m[1],
+                                 'RH': m[2],
+                                 'TVOC': TVOC,
+                                 'PM1.0': sps.dict_values['pm1p0'],
+                                 'PM2.5': sps.dict_values['pm2p5'],
+                                 'PM4.0': sps.dict_values['pm4p0'],
+                                 'PM10.0': sps.dict_values['pm10p0'],
+                                 'PMSize': sps.dict_values['typical']})
+        df = df.append(data_series[df.columns], ignore_index = True)
+
+        #prints recording indicator if data is currently recording
+        txt=Image.new('L', (160,30))
+        d = ImageDraw.Draw(txt)
+        d.text( (0, 0), 'Recording',  font=font, fill=255)
+        w=txt.rotate(270,  expand=1)
+        bg.paste( ImageOps.colorize(w, (0,0,0), (255,0,0)), (205,100),  w)
+
+    #displayt image on display with all data printed on
     display.image(bg)
-    time.sleep(2)
-    GPIO.output(18,GPIO.LOW)
-    GPIO.output(14,GPIO.LOW)
-    time.sleep(1)
