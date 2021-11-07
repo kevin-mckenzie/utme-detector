@@ -55,6 +55,8 @@ while True:
     
     #make call to RTC each loop and save timestamp
     rtc_time = str(subprocess.check_output(['sudo', 'hwclock', '-r']))
+    #micahels script required the date time to be in this specific format
+    time_for_file = rtc_time[2:11] + 'T' + rtc_time[13:25] + 'Z'
     timestamp = rtc_time[13:24]
     
     #loop is on 2 second delay
@@ -84,9 +86,16 @@ while True:
                                          'PMSize'])
         elif recording == True:
             recording = False
-            filename = '/home/pi/Documents/utme-detector/data/' + date + '-' + df.iloc[0]['Timestamp']
-            df.to_csv(path_or_buf = filename, index = False)
-            data = open('/home/pi/Documents/utme-detector/data/' + date + '-' + df.iloc[0]['Timestamp'])
+            file_datetime = date + '-' + df.iloc[0]['Timestamp']
+            filename = '/home/pi/Documents/utme-detector/data/' + file_datetime 
+            #reformat file for Michael's script
+            df_transposed = df.T
+            df_transposed.to_csv(path_or_buf = filename, index = True, header = False)
+            
+            
+            data = open('/home/pi/Documents/utme-detector/data/' + file_datetime , 'a')
+            data.write('title,' + file_datetime + '\n' )
+            data.write('start,' + time_for_file)
             os.fsync(data)
             data.close()
             df = None
