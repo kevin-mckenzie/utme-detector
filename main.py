@@ -91,8 +91,6 @@ while True:
             #reformat file for Michael's script
             df_transposed = df.T
             df_transposed.to_csv(path_or_buf = filename, index = True, header = False)
-            
-            
             data = open('/home/pi/Documents/utme-detector/data/' + file_datetime , 'a')
             data.write('title,' + file_datetime + '\n' )
             data.write('start,' + time_for_file)
