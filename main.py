@@ -54,10 +54,15 @@ while True:
     draw = ImageDraw.Draw(bg)
     
     #make call to RTC each loop and save timestamp
-    rtc_time = str(subprocess.check_output(['sudo', 'hwclock', '-r']))
-    #micahels script required the date time to be in this specific format
-    time_for_file = rtc_time[2:11] + 'T' + rtc_time[13:25] + 'Z'
-    timestamp = rtc_time[13:24]
+    try:
+        rtc_time = str(subprocess.check_output(['sudo', 'hwclock', '-r']))
+        #micahels script required the date time to be in this specific format
+        time_for_file = rtc_time[2:12] + 'T' + rtc_time[13:25] + 'Z'
+        timestamp = rtc_time[13:24]
+    except: #if the hwclock is not working, then get sudo date from terminal
+        rtc_time = str(subprocess.check_output(['sudo', 'date', '--iso-8601=seconds']))
+        time_for_file = rtc_time[2:-9] + '.000Z'
+        timestamp = rtc_time[13:21]+ '.00'
     
     #loop is on 2 second delay
     time.sleep(2)
@@ -72,7 +77,7 @@ while True:
     if input_state == False:
         if recording == False:
             recording = True
-            rtc_time = str(subprocess.check_output(['sudo', 'hwclock', '-r']))
+            #rtc_time = str(subprocess.check_output(['sudo', 'hwclock', '-r']))
             date = rtc_time[2:12]
             df = pd.DataFrame(columns = ['Timestamp',
                                          'CO2',
@@ -154,7 +159,7 @@ while True:
         d.text( (0, 0), pm_size,  font=font, fill=255)
         w=txt.rotate(270,  expand=1)
         bg.paste( ImageOps.colorize(w, (0,0,0), (0,128,0)), (148,133),  w) #colored green because it looks better
-
+    
     #retrieve TVOC sensor reading
     TVOC = str(sgp.TVOC)
     #safety indicator.  References: https://www.advsolned.com/how-tvoc-affects-indoor-air-quality-effects-on-wellbeing-and-health/ https://www.teesing.com/en/page/library/tools/ppm-mg3-converter#mg/m3%20to%20PPM%20converter
