@@ -49,7 +49,7 @@ df = None
 # Main loop:
 while True:
     #refresh background image each loop
-    bg= Image.open('/home/pi/Documents/utme-detector/bg.jpg')
+    bg= Image.open('/home/pi/Documents/utme-detector/bg.jpg') #uploads background image to screen on each loop
     bg= bg.resize((240,320), Image.ANTIALIAS)
     draw = ImageDraw.Draw(bg)
     
@@ -88,11 +88,11 @@ while True:
                                          'PM2.5',
                                          'PM4.0',
                                          'PM10.0',
-                                         'PMSize'])
+                                         'PMSize']) #add a new column name for any aditional sensors added to this device
         elif recording == True:
             recording = False
             file_datetime = date + '-' + df.iloc[0]['Timestamp']
-            file_datetime = file_datetime[:-3]#last second fix to solve issue where windows cannot read files due to period in the name
+            file_datetime = file_datetime[:-3]#last second fix  (12/01/21) to solve issue where Windows do not read files as .csv due to period in the name
             filename_csv = file_datetime + '.csv'
             filename = '/home/pi/Documents/utme-detector/data/' + filename_csv
             #reformat file for Michael's script
@@ -178,6 +178,18 @@ while True:
     w=txt.rotate(270,  expand=1)
     bg.paste( ImageOps.colorize(w, (0,0,0), color), (148,32),  w)
     
+    '''
+    BLANK TEMPLATE FOR NEW DATA TO BE ADDED (with comments)
+    sensor_reading = sensor.reading() #enter correct instance name and function that retrieves reading from new sensor
+    txt=Image.new('L', (160,30)) #enter size of text, for (160,30), 160 = x number of pixels and 30 = y number of pixels
+    d = ImageDraw.Draw(txt) # creat text object on transparent background image
+    d.text( (0, 0), sensor_reading,  font=font, fill=255) #enter text that is pasted onto transparent image
+    w=txt.rotate(270,  expand=1) #rotate image to match background image orientation
+    bg.paste( ImageOps.colorize(w, (0,0,0), color), (148,32),  w) #paste rotated transparent image with text on it to background image
+    
+    NOTES: If a new sensor is added, an updated background image must be created to provide context for the new reading. Coordinates must
+    be adjusted to accomodate al other readings on the new background.
+    '''
     if recording == True:
         #if recording, add a row of data to the dataframe
         data_series = pd.Series({'Timestamp': timestamp,
@@ -189,7 +201,7 @@ while True:
                                  'PM2.5': sps.dict_values['pm2p5'],
                                  'PM4.0': sps.dict_values['pm4p0'],
                                  'PM10.0': sps.dict_values['pm10p0'],
-                                 'PMSize': sps.dict_values['typical']})
+                                 'PMSize': sps.dict_values['typical']}) #add new data as an attribute in this pandas Series 
         df = df.append(data_series[df.columns], ignore_index = True)
 
         #prints recording indicator if data is currently recording
