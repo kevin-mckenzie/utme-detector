@@ -92,14 +92,16 @@ while True:
         elif recording == True:
             recording = False
             file_datetime = date + '-' + df.iloc[0]['Timestamp']
-            filename = '/home/pi/Documents/utme-detector/data/' + file_datetime 
+            file_datetime = file_datetime[:-3]#last second fix to solve issue where windows cannot read files due to period in the name
+            filename_csv = file_datetime + '.csv'
+            filename = '/home/pi/Documents/utme-detector/data/' + filename_csv
             #reformat file for Michael's script
             df_transposed = df.T
-            df_transposed.to_csv(path_or_buf = filename, index = True, header = False)
-            data = open('/home/pi/Documents/utme-detector/data/' + file_datetime , 'a')
+            df_transposed.to_csv(path_or_buf = filename, index = True, header = False) #save file as CSV
+            data = open('/home/pi/Documents/utme-detector/data/' + filename_csv , 'a') 
             data.write('title,' + file_datetime + '\n' )
             data.write('start,' + time_for_file)
-            os.fsync(data)
+            os.fsync(data) #THIS IS A VERY IMPORTANT LINE WHICH PREVENTS DEVICE FROM DELETING DATA WHEN TURNED OFF AFTER RECORDING IS DONE
             data.close()
             df = None
         time.sleep(2)
